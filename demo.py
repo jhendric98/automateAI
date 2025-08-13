@@ -168,7 +168,7 @@ with st.sidebar:
                                         st.info(f"Set your model to: {model_ids[0]}")
                                 else:
                                     st.warning("No models available with this API key.")
-                            except Exception as list_error:
+                            except Exception:
                                 # If listing models failed, try some common alternatives
                                 st.warning("Couldn't list models, trying common alternatives...")
                                 
@@ -185,7 +185,7 @@ with st.sidebar:
                                         st.success(f"✅ Found working model: '{test_model}'! Consider using this instead.")
                                         st.session_state.model = test_model
                                         break
-                                    except:
+                                    except:  # noqa: E722
                                         continue
                                 else:
                                     # If no models worked, we still know the API key itself is valid

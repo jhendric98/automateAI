@@ -1,6 +1,7 @@
 # AI Chat System with Custom System Prompts
 
 A simple Streamlit application that allows you to:
+
 - Create and manage multiple system prompts
 - Chat with an AI using the selected system prompt
 - Save and load your custom prompts
@@ -18,25 +19,29 @@ A simple Streamlit application that allows you to:
 ## Installation
 
 1. Clone the repository:
-   ```
+
+   ```bash
    git clone https://github.com/yourusername/automateAI.git
    cd automateAI
    ```
 
 2. Install dependencies:
-   ```
+
+   ```bash
    pip install -r requirements.txt
    ```
 
 3. Set up environment variables:
-   
+
    Copy the example template:
-   ```
+
+   ```bash
    cp env.example .env
    ```
-   
+
    Edit the `.env` file with your credentials:
-   ```
+
+   ```bash
    # Required
    OPENAI_API_KEY=your_api_key_here
    
@@ -48,7 +53,8 @@ A simple Streamlit application that allows you to:
 ## Usage
 
 1. Run the application:
-   ```
+
+   ```bash
    streamlit run demo.py
    ```
 
@@ -104,6 +110,7 @@ A simple Streamlit application that allows you to:
 ## System Prompts
 
 The application comes with three default system prompts:
+
 - **Default**: A general helpful assistant
 - **Coding Assistant**: Specialized in programming help
 - **Creative Writer**: Focused on creative writing assistance
@@ -124,7 +131,7 @@ The app supports the following environment variables:
 
 You can set these in a `.env` file or in your system environment.
 
-### Features
+### Configuration Options
 
 - **Custom API Endpoints**: Set a custom base URL for Azure OpenAI or other providers
 - **Custom Models**: Enter specific model names or deployment IDs not in the standard list
@@ -141,4 +148,4 @@ You can set these in a `.env` file or in your system environment.
 
 - Your API key is required to use the chat functionality
 - The application uses gpt-4o-2024-11-20 by default
-- Your prompts are saved locally in a JSON file 
+- Your prompts are saved locally in a JSON file
