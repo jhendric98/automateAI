@@ -1,0 +1,23 @@
+AI Chat System with RAG - Test Document
+
+This is a test document for the RAG (Retrieval-Augmented Generation) functionality.
+
+Key Features:
+1. The system uses Qdrant for vector storage
+2. Documents are processed and chunked automatically
+3. FastEmbed is used for generating embeddings
+4. The system supports PDF, DOCX, and TXT files
+
+How it Works:
+- Upload documents using the + button next to the chat input
+- Documents are automatically chunked and embedded
+- When you ask questions, the system searches for relevant context
+- The AI uses the context to provide more accurate answers
+
+Technical Details:
+- Embeddings are 384-dimensional using BAAI/bge-small-en-v1.5 model
+- Text is chunked with tiktoken for optimal token management
+- Qdrant runs in-memory for local development
+- OpenAI API is used for the chat completions
+
+This test document can be used to verify that the RAG system is working correctly.

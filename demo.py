@@ -4,12 +4,58 @@ import json
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import tiktoken
+from typing import List, Dict, Any
+import uuid
+import hashlib
+
+# Disable tokenizer parallelism warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# Qdrant and embedding imports
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PointStruct
+from fastembed import TextEmbedding
+
+# File processing imports
+from pypdf import PdfReader
+from docx import Document
 
 # Load environment variables from .env file if present
 load_dotenv()
 
 # Configuration
-st.set_page_config(page_title="AI Chat System", layout="wide")
+st.set_page_config(page_title="AI Chat System with RAG", layout="wide")
+
+# Initialize Qdrant client (in-memory for local development)
+@st.cache_resource
+def init_qdrant():
+    """Initialize Qdrant client with in-memory storage"""
+    client = QdrantClient(":memory:")
+    
+    # Create collection if it doesn't exist
+    collection_name = "documents"
+    
+    # Using fastembed for embeddings (384 dimensions for BAAI/bge-small-en-v1.5)
+    try:
+        client.get_collection(collection_name)
+    except Exception:
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+        )
+    
+    return client, collection_name
+
+# Initialize embedding model
+@st.cache_resource
+def init_embedding_model():
+    """Initialize the embedding model"""
+    return TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+
+# Get clients
+qdrant_client, COLLECTION_NAME = init_qdrant()
+embedding_model = init_embedding_model()
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -38,7 +84,170 @@ if "api_base" not in st.session_state:
     base_url = os.getenv("OPENAI_API_BASE", "")
     st.session_state.api_base = base_url if base_url else None
 
-# Save and load functions
+if "uploaded_files_metadata" not in st.session_state:
+    st.session_state.uploaded_files_metadata = []
+
+if "use_rag" not in st.session_state:
+    st.session_state.use_rag = True
+    
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = set()
+    
+if "show_upload_success" not in st.session_state:
+    st.session_state.show_upload_success = False
+    st.session_state.upload_success_message = ""
+
+# File processing functions
+def extract_text_from_pdf(file) -> str:
+    """Extract text from PDF file"""
+    try:
+        pdf_reader = PdfReader(file)
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+    except Exception as e:
+        st.error(f"Error reading PDF: {str(e)}")
+        return ""
+
+def extract_text_from_docx(file) -> str:
+    """Extract text from DOCX file"""
+    try:
+        doc = Document(file)
+        text = ""
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        return text
+    except Exception as e:
+        st.error(f"Error reading DOCX: {str(e)}")
+        return ""
+
+def extract_text_from_txt(file) -> str:
+    """Extract text from TXT file"""
+    try:
+        return str(file.read(), "utf-8")
+    except Exception as e:
+        st.error(f"Error reading TXT: {str(e)}")
+        return ""
+
+def process_uploaded_file(uploaded_file) -> str:
+    """Process uploaded file and extract text"""
+    file_extension = uploaded_file.name.split('.')[-1].lower()
+    
+    if file_extension == 'pdf':
+        return extract_text_from_pdf(uploaded_file)
+    elif file_extension == 'docx':
+        return extract_text_from_docx(uploaded_file)
+    elif file_extension == 'txt':
+        return extract_text_from_txt(uploaded_file)
+    else:
+        st.error(f"Unsupported file type: {file_extension}")
+        return ""
+
+def chunk_text(text: str, chunk_size: int = 500, chunk_overlap: int = 50) -> List[str]:
+    """Split text into overlapping chunks"""
+    try:
+        encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+    except Exception:
+        encoding = tiktoken.get_encoding("cl100k_base")
+    
+    tokens = encoding.encode(text)
+    chunks = []
+    
+    for i in range(0, len(tokens), chunk_size - chunk_overlap):
+        chunk_tokens = tokens[i:i + chunk_size]
+        chunk_text = encoding.decode(chunk_tokens)
+        chunks.append(chunk_text)
+    
+    return chunks
+
+def generate_embeddings(texts: List[str]) -> List[List[float]]:
+    """Generate embeddings for text chunks using fastembed"""
+    embeddings = list(embedding_model.embed(texts))
+    return embeddings
+
+def store_in_qdrant(chunks: List[str], embeddings: List[List[float]], filename: str, file_id: str):
+    """Store embeddings in Qdrant"""
+    points = []
+    
+    for idx, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+        point_id = hashlib.md5(f"{file_id}_{idx}".encode()).hexdigest()
+        
+        points.append(
+            PointStruct(
+                id=point_id,
+                vector=embedding,
+                payload={
+                    "text": chunk,
+                    "filename": filename,
+                    "file_id": file_id,
+                    "chunk_index": idx
+                }
+            )
+        )
+    
+    # Upload points to Qdrant
+    qdrant_client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=points
+    )
+    
+    return len(points)
+
+def search_similar_chunks(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """Search for similar chunks in Qdrant"""
+    # Generate embedding for query
+    query_embedding = list(embedding_model.embed([query]))[0]
+    
+    # Search in Qdrant
+    search_results = qdrant_client.search(
+        collection_name=COLLECTION_NAME,
+        query_vector=query_embedding,
+        limit=limit
+    )
+    
+    # Extract relevant information
+    results = []
+    for result in search_results:
+        results.append({
+            "text": result.payload["text"],
+            "filename": result.payload["filename"],
+            "score": result.score
+        })
+    
+    return results
+
+def delete_file_from_qdrant(file_id: str):
+    """Delete all chunks associated with a file from Qdrant"""
+    # Get all points for this file
+    all_points = qdrant_client.scroll(
+        collection_name=COLLECTION_NAME,
+        scroll_filter={
+            "must": [
+                {
+                    "key": "file_id",
+                    "match": {
+                        "value": file_id
+                    }
+                }
+            ]
+        },
+        limit=1000
+    )[0]
+    
+    # Extract point IDs
+    point_ids = [point.id for point in all_points]
+    
+    if point_ids:
+        # Delete points
+        qdrant_client.delete(
+            collection_name=COLLECTION_NAME,
+            points_selector=point_ids
+        )
+    
+    return len(point_ids)
+
+# Save and load functions for system prompts
 def save_prompts():
     try:
         with open("system_prompts.json", "w") as f:
@@ -94,150 +303,37 @@ if not success:
 with st.sidebar:
     st.title("System Prompts")
     
-    # API Settings
-    st.markdown("### API Configuration")
+    # RAG Settings
+    st.markdown("### RAG Settings")
+    st.session_state.use_rag = st.checkbox("Use RAG for responses", value=st.session_state.use_rag)
     
-    # API Base URL (for custom endpoints)
-    api_base = st.text_input("API Base URL (Optional)", 
-                           placeholder="https://my-endpoint.openai.azure.com", 
-                           value=st.session_state.api_base if st.session_state.api_base else "",
-                           help="Leave empty for default OpenAI. For Azure, use your deployment URL.")
+    # Uploaded Files Management
+    st.markdown("### Uploaded Documents")
+    if st.session_state.uploaded_files_metadata:
+        st.caption(f"Total documents: {len(st.session_state.uploaded_files_metadata)}")
+        for file_meta in st.session_state.uploaded_files_metadata:
+            with st.container():
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    filename_display = file_meta['filename']
+                    if len(filename_display) > 30:
+                        filename_display = filename_display[:30] + "..."
+                    st.text(f"📄 {filename_display}")
+                    st.caption(f"{file_meta['chunks']} chunks")
+                with col2:
+                    if st.button("🗑️", key=f"delete_{file_meta['file_id']}", help="Delete document"):
+                        # Delete from Qdrant
+                        delete_file_from_qdrant(file_meta['file_id'])
+                        # Remove from metadata
+                        st.session_state.uploaded_files_metadata = [
+                            f for f in st.session_state.uploaded_files_metadata 
+                            if f['file_id'] != file_meta['file_id']
+                        ]
+                        st.rerun()
+    else:
+        st.info("No documents uploaded yet")
     
-    if (api_base != st.session_state.api_base) and api_base.strip():
-        st.session_state.api_base = api_base.strip()
-    elif not api_base.strip() and st.session_state.api_base:
-        st.session_state.api_base = None
-    
-    # API Key input
-    st.markdown("### API Key (Required)")
-    st.markdown("For OpenAI, get your API key from [OpenAI Platform](https://platform.openai.com/api-keys)")
-    api_key = st.text_input("Enter your API Key", type="password", value=st.session_state.api_key)
-    if api_key != st.session_state.api_key:
-        st.session_state.api_key = api_key
-        
-    # API key status indicator and verification
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        if st.session_state.api_key:
-            st.success("API Key provided")
-        else:
-            st.error("API Key required")
-    
-    with col2:
-        if st.button("Verify Key"):
-            if not st.session_state.api_key:
-                st.error("No API key to verify")
-            else:
-                try:
-                    # Create client with optional base URL
-                    if st.session_state.api_base:
-                        client = openai.OpenAI(
-                            api_key=st.session_state.api_key,
-                            base_url=st.session_state.api_base
-                        )
-                    else:
-                        client = openai.OpenAI(api_key=st.session_state.api_key)
-                    
-                    # First try with the current selected model
-                    try:
-                        response = client.chat.completions.create(
-                            model=st.session_state.model,
-                            messages=[{"role": "user", "content": "Hello"}],
-                            max_tokens=5
-                        )
-                        st.success(f"✅ API key is valid! Model '{st.session_state.model}' is accessible.")
-                    except Exception as model_error:
-                        # If the selected model fails, try to at least verify the API key is valid
-                        if "model_not_found" in str(model_error) or "does not have access to model" in str(model_error):
-                            # Try to determine which models are available
-                            st.warning(f"⚠️ Your API key cannot access the model: '{st.session_state.model}'")
-                            st.info("Let's try to find a model you can access...")
-                            
-                            # Try to get available models directly
-                            try:
-                                available_models = client.models.list()
-                                model_ids = [model.id for model in available_models.data]
-                                if model_ids:
-                                    st.success(f"✅ Found {len(model_ids)} available models for your API key!")
-                                    st.info("Available models: " + ", ".join(model_ids[:5]) + 
-                                           ("..." if len(model_ids) > 5 else ""))
-                                    
-                                    # If we found models, set to the first available one
-                                    if model_ids:
-                                        st.session_state.model = model_ids[0]
-                                        st.info(f"Set your model to: {model_ids[0]}")
-                                else:
-                                    st.warning("No models available with this API key.")
-                            except Exception:
-                                # If listing models failed, try some common alternatives
-                                st.warning("Couldn't list models, trying common alternatives...")
-                                
-                                # Try common model variations
-                                test_models = ["gpt-4", "gpt-4-turbo", "gpt-35-turbo", "text-davinci-003", 
-                                             "claude-instant-1", "claude-2", "j2-light"]
-                                for test_model in test_models:
-                                    try:
-                                        response = client.chat.completions.create(
-                                            model=test_model,
-                                            messages=[{"role": "user", "content": "Hello"}],
-                                            max_tokens=5
-                                        )
-                                        st.success(f"✅ Found working model: '{test_model}'! Consider using this instead.")
-                                        st.session_state.model = test_model
-                                        break
-                                    except:  # noqa: E722
-                                        continue
-                                else:
-                                    # If no models worked, we still know the API key itself is valid
-                                    st.error("❌ API key is valid but no standard models are accessible.")
-                                    st.info("You may need to enter your specific deployment name or model ID.")
-                        else:
-                            # Some other error with the model
-                            raise model_error
-                            
-                except openai.AuthenticationError:
-                    st.error("❌ Invalid API key")
-                except openai.RateLimitError:
-                    st.warning("⚠️ Rate limit reached, but API key appears valid")
-                except Exception as e:
-                    if "invalid_api_key" in str(e):
-                        st.error("❌ Invalid API key")
-                    else:
-                        st.error(f"❌ Error: {str(e)}")
-        
-    # Model selection
-    st.subheader("Model Selection")
-    custom_model = st.text_input("Enter model name (if yours isn't listed below)", 
-                               placeholder="e.g., gpt-35-turbo or your custom deployment name")
-    
-    if custom_model and custom_model != st.session_state.model:
-        st.session_state.model = custom_model
-    
-    model_options = [
-        "gpt-4o-2024-11-20",  # Make this the first option
-        "gpt-3.5-turbo", 
-        "gpt-4", 
-        "gpt-4-turbo",
-        # Azure OpenAI common names
-        "gpt-35-turbo",
-        "gpt-4-32k",
-        # Add some potential custom deployment names
-        "text-davinci-003"
-    ]
-    
-    if custom_model and custom_model not in model_options:
-        model_options.append(custom_model)
-        
-    model = st.selectbox(
-        "Or select a common model",
-        options=model_options,
-        index=0 if st.session_state.model not in model_options else model_options.index(st.session_state.model),
-        help="Select the model to use. Your API key must have access to the selected model."
-    )
-    if model != st.session_state.model and not custom_model:
-        st.session_state.model = model
-        
-    st.info(f"Currently using: **{st.session_state.model}**")
+    st.divider()
     
     # Select prompt
     prompt_options = list(st.session_state.system_prompts.keys())
@@ -273,8 +369,6 @@ with st.sidebar:
         key="selected_prompt_temp",
         on_change=on_prompt_change
     )
-    
-    # No need for the explicit check here anymore, it's handled by the callback
     
     # Display and edit the current system prompt
     st.subheader("Edit Current Prompt")
@@ -467,18 +561,28 @@ with st.sidebar:
         st.session_state.messages = []
 
 # Main chat interface
-st.title("AI Chat System")
+st.title("AI Chat System with RAG")
 st.subheader(f"Active System Prompt: {st.session_state.selected_prompt}")
+
+# Display RAG status
+if st.session_state.use_rag and st.session_state.uploaded_files_metadata:
+    st.info(f"📚 RAG enabled with {len(st.session_state.uploaded_files_metadata)} document(s)")
 
 # Display chat messages
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
+        # Show context sources if available
+        if "sources" in msg and msg["sources"]:
+            with st.expander("📎 Context Sources"):
+                for source in msg["sources"]:
+                    st.write(f"**{source['filename']}** (relevance: {source['score']:.2f})")
+                    st.text(source['text'][:200] + "...")
 
-# Function to generate AI responses
+# Function to generate AI responses with RAG
 def generate_response(messages):
     if not st.session_state.api_key:
-        return "⚠️ Please enter your OpenAI API key in the sidebar. You can get an API key from https://platform.openai.com/api-keys"
+        return "⚠️ Please enter your OpenAI API key in the sidebar. You can get an API key from https://platform.openai.com/api-keys", []
     
     try:
         # Create client with optional base URL
@@ -490,9 +594,37 @@ def generate_response(messages):
         else:
             client = openai.OpenAI(api_key=st.session_state.api_key)
         
+        # Get the last user message
+        last_user_message = messages[-1]["content"] if messages else ""
+        
+        # Search for relevant context if RAG is enabled
+        context_sources = []
+        context_text = ""
+        
+        if st.session_state.use_rag and st.session_state.uploaded_files_metadata and last_user_message:
+            # Search for similar chunks
+            similar_chunks = search_similar_chunks(last_user_message, limit=5)
+            
+            if similar_chunks:
+                context_sources = similar_chunks
+                context_text = "\n\n".join([chunk["text"] for chunk in similar_chunks])
+                
+                # Augment the system prompt with context
+                augmented_system_prompt = f"""{st.session_state.system_prompts[st.session_state.selected_prompt]}
+
+You have access to the following context from uploaded documents. Use this information to answer questions when relevant:
+
+{context_text}
+
+Important: If the answer can be found in the context, use it. If not, you can use your general knowledge but mention that the information is not from the uploaded documents."""
+            else:
+                augmented_system_prompt = st.session_state.system_prompts[st.session_state.selected_prompt]
+        else:
+            augmented_system_prompt = st.session_state.system_prompts[st.session_state.selected_prompt]
+        
         # Add system prompt
         full_messages = [
-            {"role": "system", "content": st.session_state.system_prompts[st.session_state.selected_prompt]}
+            {"role": "system", "content": augmented_system_prompt}
         ] + messages
         
         response = client.chat.completions.create(
@@ -501,17 +633,83 @@ def generate_response(messages):
             temperature=0.7,
         )
         
-        return response.choices[0].message.content
+        return response.choices[0].message.content, context_sources
+        
     except openai.AuthenticationError:
-        return "❌ **Authentication Error**: The API key you provided is invalid or has expired. Please check your API key and try again."
+        return "❌ **Authentication Error**: The API key you provided is invalid or has expired. Please check your API key and try again.", []
     except openai.RateLimitError:
-        return "⚠️ **Rate Limit Error**: You've exceeded your current quota with OpenAI. Check your plan and billing details at https://platform.openai.com/account/billing"
+        return "⚠️ **Rate Limit Error**: You've exceeded your current quota with OpenAI. Check your plan and billing details at https://platform.openai.com/account/billing", []
     except openai.APIError as e:
         if "model_not_found" in str(e) or "does not have access to model" in str(e):
-            return f"❌ **Model Access Error**: Your account doesn't have access to {st.session_state.model}. Try using gpt-3.5-turbo instead."
-        return f"❌ **API Error**: {str(e)}"
+            return f"❌ **Model Access Error**: Your account doesn't have access to {st.session_state.model}. Try using gpt-3.5-turbo instead.", []
+        return f"❌ **API Error**: {str(e)}", []
     except Exception as e:
-        return f"❌ **Error**: {str(e)}"
+        return f"❌ **Error**: {str(e)}", []
+
+# Show upload success message if needed
+if st.session_state.show_upload_success:
+    st.success(st.session_state.upload_success_message)
+    st.session_state.show_upload_success = False
+    st.session_state.upload_success_message = ""
+
+# File upload section
+with st.expander("📎 Upload Document", expanded=False):
+    with st.form("upload_form", clear_on_submit=True):
+        uploaded_file = st.file_uploader(
+            "Choose a file",
+            type=['pdf', 'txt', 'docx'],
+            help="Upload PDF, DOCX, or TXT files to add to your knowledge base"
+        )
+        
+        submit_button = st.form_submit_button("Upload and Process")
+        
+        if submit_button and uploaded_file is not None:
+            # Create a unique identifier for this file
+            file_hash = hashlib.md5(uploaded_file.read()).hexdigest()
+            uploaded_file.seek(0)  # Reset file pointer after reading
+            
+            # Check if file has already been processed
+            if file_hash not in st.session_state.processed_files:
+                with st.spinner(f"Processing {uploaded_file.name}..."):
+                    # Process the file
+                    text = process_uploaded_file(uploaded_file)
+                    
+                    if text:
+                        # Chunk the text
+                        chunks = chunk_text(text)
+                        
+                        if chunks:
+                            # Generate embeddings
+                            embeddings = generate_embeddings(chunks)
+                            
+                            # Generate unique file ID
+                            file_id = str(uuid.uuid4())
+                            
+                            # Store in Qdrant
+                            num_chunks = store_in_qdrant(chunks, embeddings, uploaded_file.name, file_id)
+                            
+                            # Add to metadata
+                            st.session_state.uploaded_files_metadata.append({
+                                "filename": uploaded_file.name,
+                                "file_id": file_id,
+                                "chunks": num_chunks,
+                                "timestamp": datetime.now().isoformat()
+                            })
+                            
+                            # Mark file as processed
+                            st.session_state.processed_files.add(file_hash)
+                            
+                            # Set success message
+                            st.session_state.show_upload_success = True
+                            st.session_state.upload_success_message = f"✅ Successfully uploaded {uploaded_file.name} ({num_chunks} chunks)"
+                            
+                            st.rerun()
+                        else:
+                            st.error("No content could be extracted from the file")
+                    else:
+                        st.error("Failed to process the file")
+            else:
+                st.warning(f"File '{uploaded_file.name}' has already been uploaded")
 
 # Chat input
 if prompt := st.chat_input("What would you like to ask?"):
@@ -523,13 +721,26 @@ if prompt := st.chat_input("What would you like to ask?"):
     # Generate and display assistant response
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            response = generate_response(st.session_state.messages)
+            response, sources = generate_response(st.session_state.messages)
             st.write(response)
+            
+            # Show sources if available
+            if sources:
+                with st.expander("📎 Context Sources"):
+                    for source in sources:
+                        st.write(f"**{source['filename']}** (relevance: {source['score']:.2f})")
+                        st.text(source['text'][:200] + "...")
     
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": response})
+    # Add assistant response to chat history with sources
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": response,
+        "sources": sources
+    })
 
 # Display model and timestamp info
 st.caption(f"Using system prompt: {st.session_state.selected_prompt}")
 st.caption(f"Model: {st.session_state.model}")
 st.caption(f"Session time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+if st.session_state.uploaded_files_metadata:
+    st.caption(f"Documents loaded: {len(st.session_state.uploaded_files_metadata)}")

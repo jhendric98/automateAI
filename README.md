@@ -1,20 +1,25 @@
-# AI Chat System with Custom System Prompts
+# AI Chat System with RAG and Custom System Prompts
 
-A simple Streamlit application that allows you to:
+A powerful Streamlit application that combines AI chat with Retrieval-Augmented Generation (RAG) capabilities, allowing you to:
 
+- Upload and query your own documents (PDF, DOCX, TXT)
 - Create and manage multiple system prompts
 - Chat with an AI using the selected system prompt
+- Get AI responses enhanced with context from your documents
 - Save and load your custom prompts
 - Use custom API endpoints and models
 
 ## Features
 
+- **RAG (Retrieval-Augmented Generation)**: Upload documents and get AI responses based on your content
+- **Document Management**: Support for PDF, DOCX, and TXT files with automatic processing
+- **Vector Storage**: Local Qdrant vector database for efficient document retrieval
 - **Multiple System Prompts**: Create, edit, and delete custom system prompts
-- **Chat Interface**: Interactive chat UI similar to ChatGPT
+- **Chat Interface**: Interactive chat UI similar to ChatGPT with file upload capability
 - **Model Selection**: Choose from various AI models or enter custom model names
 - **API Flexibility**: Works with OpenAI, Azure OpenAI, and other compatible APIs
 - **Persistence**: Save and load your prompts between sessions
-- **API Key Management**: Securely enter your API key
+- **Context Display**: See which document chunks were used to generate responses
 
 ## Installation
 
@@ -58,21 +63,49 @@ A simple Streamlit application that allows you to:
    streamlit run demo.py
    ```
 
-2. Configure your API:
-   - Enter your API key
-   - Optionally set a custom API base URL (for Azure or other endpoints)
-   - Verify your API key to discover available models
+2. Set up your API key via environment variable:
+   - Edit the `.env` file with your OpenAI API key
+   - The app will automatically use the configured credentials
 
-3. Select or customize your model:
-   - Use the default model (gpt-4o-2024-11-20)
-   - Select from common models in the dropdown
-   - Enter a custom model name or deployment ID
+3. Upload documents (optional):
+   - Click the 📎 button next to the chat input
+   - Select PDF, DOCX, or TXT files to upload
+   - Documents are automatically processed and indexed
 
 4. Use the pre-configured system prompts or create your own
 
-5. Start chatting with the AI using your selected system prompt
+5. Start chatting with the AI:
+   - Ask questions about your uploaded documents
+   - Or have regular conversations without documents
+   - Toggle RAG on/off in the sidebar as needed
 
 ## Features Guide
+
+### RAG (Retrieval-Augmented Generation)
+
+1. **Uploading Documents**:
+   - Click the 📎 button next to the chat input
+   - Select PDF, DOCX, or TXT files
+   - Files are automatically processed, chunked, and indexed
+   - View uploaded documents in the sidebar
+
+2. **Document Processing**:
+   - Text is extracted from uploaded files
+   - Content is split into optimal chunks using tiktoken
+   - Embeddings are generated using FastEmbed (BAAI/bge-small-en-v1.5)
+   - Vectors are stored in local Qdrant database (in-memory)
+
+3. **Querying Documents**:
+   - Simply ask questions in the chat
+   - The system automatically searches for relevant context
+   - AI responses are enhanced with document content
+   - View source chunks used for each response
+
+4. **Managing Documents**:
+   - View all uploaded documents in the sidebar
+   - See chunk count for each document
+   - Delete documents individually with the 🗑️ button
+   - Toggle RAG on/off as needed
 
 ### Managing System Prompts
 
@@ -104,8 +137,13 @@ A simple Streamlit application that allows you to:
 ## Requirements
 
 - Python 3.7+
-- Streamlit >= 1.45.0
-- OpenAI Python library >= 1.6.0
+- Streamlit >= 1.48.1
+- OpenAI Python library >= 1.99.9
+- Qdrant Client >= 1.15.1
+- PyPDF >= 5.1.0
+- python-docx >= 1.1.2
+- tiktoken >= 0.8.0
+- fastembed >= 0.4.2
 
 ## System Prompts
 
