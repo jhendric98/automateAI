@@ -13,4 +13,5 @@ dependencies = [
     "python-docx>=1.1.2",
     "tiktoken>=0.8.0",
     "fastembed>=0.4.2",
+    "watchdog>=6.0.0",
 ]

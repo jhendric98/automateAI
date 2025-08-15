@@ -1,1 +1,1 @@
-   streamlit run demo.py
+streamlit run demo.py
