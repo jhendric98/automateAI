@@ -1,11 +1,11 @@
 [project]
 name = "automateai"
 version = "0.1.0"
-description = "Add your description here"
+description = "AI chat assistant with RAG-powered document grounding"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
-    "dotenv>=0.9.9",
+    "python-dotenv>=1.0.1",
     "openai>=1.99.9",
     "qdrant-client>=1.15.1",
     "streamlit>=1.48.1",
@@ -14,4 +14,9 @@ dependencies = [
     "tiktoken>=0.8.0",
     "fastembed>=0.4.2",
     "watchdog>=6.0.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.6.4",
 ]
