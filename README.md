@@ -11,12 +11,11 @@ A powerful Streamlit application that combines AI chat with Retrieval-Augmented 
 
 ## 🆕 Latest Updates
 
-- **Improved File Upload**: Form-based upload with explicit submit button prevents repetition issues
-- **Duplicate Detection**: Files are hashed to prevent uploading the same document twice
-- **Cleaner UI**: File upload in collapsible expander, improved sidebar organization
-- **Simplified Configuration**: API settings now managed via environment variables only
-- **Better Error Handling**: Fixed deprecation warnings and tokenizer parallelism issues
-- **Enhanced Document Display**: Compact document list with truncated filenames
+- **Streamlined Qdrant management**: Deleting a document now cleans up related vectors and allows re-uploads.
+- **Configurable Retrieval & Temperature**: Adjust how much context is injected and tune response creativity from the sidebar.
+- **Inline OpenAI Controls**: Manage API key, base URL, and default model without editing environment variables.
+- **Improved Upload Feedback**: File hashing, chunk statistics, and success toasts make ingestion status clearer.
+- **Cleaner Startup**: Built-in uv scripts and hardened dependency metadata keep local setup predictable.
 
 ## Quick Start
 
@@ -24,15 +23,16 @@ A powerful Streamlit application that combines AI chat with Retrieval-Augmented 
 # Clone and enter directory
 git clone https://github.com/yourusername/automateAI.git && cd automateAI
 
-# Install dependencies
-uv sync  # or pip install -r requirements.txt
+# Install dependencies with uv (recommended)
+uv sync
 
 # Set up your OpenAI API key
 cp env.example .env
 # Edit .env and add your OPENAI_API_KEY
 
-# Run the app
-streamlit run demo.py
+# Run the app via uv
+uv run streamlit run demo.py
+# or simply: ./run.sh
 ```
 
 ## Features
@@ -43,9 +43,10 @@ streamlit run demo.py
 - **Multiple System Prompts**: Create, edit, and delete custom system prompts
 - **Clean Chat Interface**: Interactive chat UI with organized file upload section
 - **Duplicate Prevention**: Intelligent file hashing prevents the same document from being uploaded multiple times
-- **API Flexibility**: Works with OpenAI, Azure OpenAI, and other compatible APIs via environment variables
+- **API Flexibility**: Works with OpenAI, Azure OpenAI, and other compatible APIs via environment variables or the in-app sidebar
 - **Persistence**: Save and load your prompts between sessions
 - **Context Display**: See which document chunks were used to generate responses with relevance scores
+- **Tunable Responses**: Adjust retrieval depth and temperature without leaving the UI
 
 ## Installation
 
@@ -94,10 +95,12 @@ streamlit run demo.py
 1. Run the application:
 
    ```bash
-   streamlit run demo.py
+   uv run streamlit run demo.py
+   # or
+   ./run.sh
    ```
 
-2. The app will automatically use your configured API credentials from the `.env` file
+2. The app will automatically use your configured API credentials from the `.env` file, and you can override the key, model, or base URL directly from the sidebar controls.
 
 3. Upload documents (optional):
    - Click the "📎 Upload Document" expander above the chat
