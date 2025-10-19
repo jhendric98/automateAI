@@ -1,22 +1,72 @@
+[build-system]
+requires = ["hatchling>=1.25", "hatch-vcs>=0.4"]
+build-backend = "hatchling.build"
+
 [project]
 name = "automateai"
-version = "0.1.0"
-description = "AI chat assistant with RAG-powered document grounding"
+dynamic = ["version"]
+description = "AI chat with RAG (Streamlit app + library)"
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-    "python-dotenv>=1.0.1",
-    "openai>=1.99.9",
-    "qdrant-client>=1.15.1",
-    "streamlit>=1.48.1",
-    "pypdf>=5.1.0",
-    "python-docx>=1.1.2",
-    "tiktoken>=0.8.0",
-    "fastembed>=0.4.2",
-    "watchdog>=6.0.0",
+requires-python = "==3.13.*"
+license = { text = "MIT" }
+authors = [{ name = "Your Name" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+  "Framework :: Streamlit",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+dependencies = [
+  "openai>=1.0.0",
+  "python-dotenv>=1.0.0",
+  "tiktoken>=0.7",
+  "typer>=0.12",
+]
+
+[project.optional-dependencies]
+app = [
+  "streamlit>=1.33",
+  "qdrant-client>=1.7",
+  "pypdf>=4",
+  "python-docx>=1.0",
+  "fastembed>=0.4",
+  "watchdog>=4",
+]
+
+[project.scripts]
+automateai = "automateai.cli:main"
+automateai-app = "automateai.app:main"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/automateai"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/automateai/data/system_prompts.json" = "automateai/data/system_prompts.json"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/automateai",
+  "README.md",
+  "LICENSE",
+  "pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 100
+lint.select = ["E","F","I","UP","B","SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = false
+ignore_missing_imports = true
 
 [tool.uv]
 dev-dependencies = [
-    "ruff>=0.6.4",
+  "ruff>=0.6.4",
+  "pytest>=8.3",
+  "mypy>=1.10",
 ]

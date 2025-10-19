@@ -1,5 +1,12 @@
 # AI Chat System with RAG and Custom System Prompts
 
+[![CI](https://github.com/jhendric98/automateAI/actions/workflows/ci.yml/badge.svg)](https://github.com/jhendric98/automateAI/actions/workflows/ci.yml)
+[![Publish](https://github.com/jhendric98/automateAI/actions/workflows/publish.yml/badge.svg)](https://github.com/jhendric98/automateAI/actions/workflows/publish.yml)
+[![PyPI - Version](https://img.shields.io/pypi/v/automateai)](https://pypi.org/project/automateai/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/automateai)](https://pypi.org/project/automateai/)
+[![PyPI - Wheel](https://img.shields.io/pypi/wheel/automateai)](https://pypi.org/project/automateai/)
+[![License](https://img.shields.io/github/license/jhendric98/automateAI)](LICENSE)
+
 A powerful Streamlit application that combines AI chat with Retrieval-Augmented Generation (RAG) capabilities, allowing you to:
 
 - Upload and query your own documents (PDF, DOCX, TXT)
@@ -23,16 +30,15 @@ A powerful Streamlit application that combines AI chat with Retrieval-Augmented 
 # Clone and enter directory
 git clone https://github.com/yourusername/automateAI.git && cd automateAI
 
-# Install dependencies with uv (recommended)
-uv sync
+# Install from PyPI (app + extras)
+pip install -U automateai[app]
 
 # Set up your OpenAI API key
 cp env.example .env
 # Edit .env and add your OPENAI_API_KEY
 
-# Run the app via uv
-uv run streamlit run demo.py
-# or simply: ./run.sh
+# Launch the app via CLI
+automateai app
 ```
 
 ## Features
@@ -57,18 +63,18 @@ uv run streamlit run demo.py
    cd automateAI
    ```
 
-2. Install dependencies using uv (recommended) or pip:
+2. Install dependencies from source (development):
 
    Using uv:
 
    ```bash
-   uv sync
+   uv sync --all-extras
    ```
 
    Or using pip:
 
    ```bash
-   pip install qdrant-client openai streamlit pypdf python-docx tiktoken fastembed python-dotenv
+   pip install -e ".[app]"
    ```
 
 3. Set up environment variables:
@@ -95,9 +101,7 @@ uv run streamlit run demo.py
 1. Run the application:
 
    ```bash
-   uv run streamlit run demo.py
-   # or
-   ./run.sh
+   automateai app
    ```
 
 2. The app will automatically use your configured API credentials from the `.env` file, and you can override the key, model, or base URL directly from the sidebar controls.
@@ -190,7 +194,7 @@ No manual configuration needed in the UI - the app automatically uses your envir
 
 ## Requirements
 
-- Python 3.7+
+- Python 3.13
 - Streamlit >= 1.48.1
 - OpenAI Python library >= 1.99.9
 - Qdrant Client >= 1.15.1
@@ -232,7 +236,17 @@ You can set these in a `.env` file or in your system environment.
 
 ## Development
 
-- **Modifying the UI**: The entire application is contained in `demo.py`
+- **Modifying the UI**: The application entry is `automateai.app:main` in `src/automateai/app.py`
+
+## Community & Repository Standards
+
+- Issues: please use the provided templates for bugs and features.
+- Labels: `bug`, `enhancement`, `question`, `dependencies`, `good first issue`, `help wanted`.
+- Pull Requests: include scope/summary, link related issues, and ensure checks pass.
+- Continuous Integration: GitHub Actions runs lint (`ruff`), format check, type check (`mypy`), and tests on push/PR.
+- Releases: Publishing to PyPI is automated via Trusted Publisher on GitHub Releases.
+- Security: see `SECURITY.md` for reporting guidelines.
+- Conduct: see `CODE_OF_CONDUCT.md`.
 - **Adding New Features**: The codebase is designed to be easily extendable
 - **Custom Storage**: Prompts are stored in `system_prompts.json` by default
 
