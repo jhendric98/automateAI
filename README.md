@@ -1,11 +1,6 @@
 # AI Chat System with RAG and Custom System Prompts
 
-[![CI](https://github.com/jhendric98/automateAI/actions/workflows/ci.yml/badge.svg)](https://github.com/jhendric98/automateAI/actions/workflows/ci.yml)
-[![Publish](https://github.com/jhendric98/automateAI/actions/workflows/publish.yml/badge.svg)](https://github.com/jhendric98/automateAI/actions/workflows/publish.yml)
-[![PyPI - Version](https://img.shields.io/pypi/v/automateai)](https://pypi.org/project/automateai/)
-[![Python Versions](https://img.shields.io/pypi/pyversions/automateai)](https://pypi.org/project/automateai/)
-[![PyPI - Wheel](https://img.shields.io/pypi/wheel/automateai)](https://pypi.org/project/automateai/)
-[![License](https://img.shields.io/github/license/jhendric98/automateAI)](LICENSE)
+
 
 A powerful Streamlit application that combines AI chat with Retrieval-Augmented Generation (RAG) capabilities, allowing you to:
 
